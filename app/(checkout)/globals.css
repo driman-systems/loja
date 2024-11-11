@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Personalização do Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #4b5563; /* Tom de cinza escuro */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #1f2937; /* Tom de fundo mais escuro */
+  border-radius: 10px;
+}
+
+/* Para Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #1f2937;
+}
+
+

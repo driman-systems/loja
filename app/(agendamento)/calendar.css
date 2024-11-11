@@ -1,0 +1,89 @@
+/* Estilos Gerais do Calendário */
+.react-calendar {
+  background-color: #1f2937;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+}
+
+/* Navegação */
+.react-calendar__navigation button {
+  margin: 3px;
+  color: #fff;
+  background-color: transparent;
+  border: none;
+  font-size: 1rem;
+}
+
+/* Estilos dos Dias */
+.react-calendar__tile {
+  background-color: #374151;
+  color: #fff;
+  border-radius: 8px;
+  margin: 1px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dia Atual */
+.react-calendar__tile--now {
+  background-color: #e8c385;
+  color: white;
+}
+
+/* Dia Selecionado */
+.react-calendar__tile--active {
+  background-color: #f87171;
+  color: white;
+}
+
+/* Remover o contorno (outline) no foco */
+.react-calendar__tile:focus {
+  background-color: #f87171 !important;
+  outline: none;
+}
+
+/* Hover */
+.react-calendar__tile:hover {
+  background-color: #f87171 !important;
+  color: #ffffff;
+}
+
+/* Finais de Semana */
+.react-calendar__month-view__days__day--weekend {
+  color: #f87171;
+}
+
+/* Navegação nos Meses */
+.react-calendar__navigation {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+/* Botões de Navegação */
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: #4b5563;
+  color: #d1d5db;
+}
+
+/* Separador de Meses */
+.react-calendar__month-view__weekdays {
+  text-transform: uppercase;
+  font-weight: bold;
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.react-calendar__tile:disabled {
+  background-color: #414c5d !important;
+  color: #6a727f !important;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.react-calendar__tile--disabled:hover {
+  background-color: #374151 !important;
+  color: #4b5563 !important;
+  cursor: not-allowed;
+}

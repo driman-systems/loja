@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id                  String   @id @default(cuid())
+  title               String
+  description         String?
+  price               Float
+  promoPrice          Float?
+  hasDateReservation  Boolean
+  reservationDays     Int[]    
+  hasTimeReservation  Boolean
+  reservationTimes    Json?    
+  reservationLimits   Json?    
+  maxReservationsPerDay Int?   
+  includedItems       String[]
+  notIncludedItems    String[]
+  image               String?
+  companyId           String
+  company             Company  @relation(fields: [companyId], references: [id])
+  bookings            Booking[]  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model AdminUser {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  role        String  
+  name        String
+  phoneNumber String?
+  cpf         String?  @unique  
+  image       String?  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ClientUser {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  role        String   @default("Cliente")
+  name        String
+  cpf         String   @unique
+  phoneNumber String?
+  estado      String?  
+  cidade      String?  
+  birthDate   DateTime?  
+  bookings    Booking[] 
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Company {
+  id                String     @id @default(cuid())
+  name              String
+  cnpj              String     @unique
+  phoneNumber       String
+  email             String     @unique
+  street            String?
+  number            String?
+  complement        String?
+  neighborhood      String?
+  city              String?
+  state             String?
+  postalCode        String?
+  website           String?
+  representative    String?
+  representativePhone String?
+  sector            String?
+  status            String     @default("Ativa")
+  logo              String?
+  products          Product[]
+  bookings          Booking[]  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+
+model Booking {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  clientId      String
+  client        ClientUser @relation(fields: [clientId], references: [id])
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id])
+  date          DateTime
+  time          String?
+  quantity      Int
+  price         Float
+  status        String    @default("Pendente")
+  paymentStatus String    @default("Aguardando Pagamento")
+  isConsumed    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+}
+
+
+model Payment {
+  id                 String     @id @default(cuid())
+  transactionId      String?    // ID da transação do Mercado Pago
+  transactionAmount  Float
+  status             String     @default("Pendente") // Status do pagamento
+  installments       Int?
+  payerEmail         String?  
+  createdAt          DateTime   @default(now())
+  paymentMethod      String
+  bookingIds         String[]  
+  statusDetail       String?    // Detalhes do status do pagamento
+  errorDetails       String?    // Detalhes de erro em caso de falha
+}
+
+

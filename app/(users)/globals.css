@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Personalização do Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #4b5563; /* Tom de cinza escuro */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #1f2937; /* Tom de fundo mais escuro */
+  border-radius: 10px;
+}
+
+/* Para Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #1f2937;
+}
+
+
+input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1); /* Inverte a cor do ícone */
+    opacity: 0.6; /* Ajusta a opacidade */
+  }
+  
+  /* Opcional: Adicionar um efeito de hover */
+  input[type="time"]:hover::-webkit-calendar-picker-indicator {
+    opacity: 1;
+  }
+
