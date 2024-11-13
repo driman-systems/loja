@@ -2,36 +2,41 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Server as IOServer } from 'socket.io';
+import { Server as HttpServer } from 'http';
 
 declare global {
   var io: IOServer | undefined;
 }
 
 export async function GET(req: NextRequest) {
-  // Verifique se o Socket.io já foi inicializado
   if (!global.io) {
-    // Acesse o servidor HTTP
-    const server: any = (req as any).socket?.server;
+    const server: HttpServer | undefined = (req as any).socket?.server;
 
-    if (server && !server.io) {
-      // Inicialize o Socket.io com o servidor HTTP
+    if (server && !(server as any).io) {
+      // Inicializando o Socket.io com o servidor HTTP
       const io = new IOServer(server, {
-        path: '/api/socket', // Certifique-se de que o cliente usa o mesmo path
+        path: '/api/socket',
       });
 
       io.on('connection', (socket) => {
         console.log('Novo cliente conectado:', socket.id);
+
+        // Emite um evento quando o pagamento for confirmado
+        socket.on('confirmPayment', (data) => {
+          console.log('Confirmação de pagamento recebida:', data);
+          // Emite o evento de confirmação de pagamento para os clientes conectados
+          io.emit('paymentConfirmed', { transactionId: data.transactionId });
+        });
 
         socket.on('disconnect', () => {
           console.log('Cliente desconectado:', socket.id);
         });
       });
 
-      // Salve a instância global do Socket.io para evitar duplicações
-      server.io = io;
+      (server as any).io = io;
       global.io = io;
     }
   }
 
-  return new NextResponse(null, { status: 200 });
+  return NextResponse.json({ message: 'Socket initialized' });
 }

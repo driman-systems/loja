@@ -105,16 +105,16 @@ model Booking {
 
 model Payment {
   id                 String     @id @default(cuid())
-  transactionId      String?    // ID da transação do Mercado Pago
+  transactionId      String?    @unique
   transactionAmount  Float
-  status             String     @default("Pendente") // Status do pagamento
+  status             String     @default("Pendente")
   installments       Int?
   payerEmail         String?  
   createdAt          DateTime   @default(now())
   paymentMethod      String
   bookingIds         String[]  
-  statusDetail       String?    // Detalhes do status do pagamento
-  errorDetails       String?    // Detalhes de erro em caso de falha
+  statusDetail       String?    
+  errorDetails       String?   
 }
 
 

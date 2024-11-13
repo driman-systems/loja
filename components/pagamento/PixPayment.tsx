@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
-import io, { Socket } from "socket.io-client";
+import io from "socket.io-client";
+
+const socket = io("/", { path: "/api/socket" }); // Configura o caminho do Socket.io
 
 interface PixPaymentProps {
   totalAmount: number;
@@ -13,8 +15,6 @@ interface PixPaymentProps {
   clientId: string | null;
   expirationDate?: string;
 }
-
-let socket: Socket;
 
 const PixPayment: React.FC<PixPaymentProps> = ({
   totalAmount,
@@ -33,17 +33,15 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const router = useRouter();
 
-  // Função para formatar o tempo em MM:SS
+  // Formata o tempo para o formato MM:SS
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
   };
 
-  // Conectar ao Socket.io no cliente
+  // Configura a conexão ao Socket.io para escutar o evento de confirmação de pagamento
   useEffect(() => {
-    socket = io({ path: "/api/socket" });
-
     socket.on("paymentConfirmed", ({ transactionId }) => {
       toast.success("Pagamento confirmado!");
       handleClearCart();
@@ -55,11 +53,11 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     };
   }, [router, handleClearCart]);
 
-  // Função para gerar o QR Code Pix, com useCallback para evitar recriação desnecessária
+  // Função para gerar o QR Code do Pix
   const generatePixQRCode = useCallback(async () => {
     setLoading(true);
-    setGeneratingQRCode(true); // Iniciar estado de geração
-    setTimeLeft(120); // Resetar o contador para 2 minutos
+    setGeneratingQRCode(true);
+    setTimeLeft(120);
 
     const paymentData = {
       clientId,
@@ -97,11 +95,11 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       toast.error("Ocorreu um erro no pagamento.", { position: "top-center" });
     } finally {
       setLoading(false);
-      setGeneratingQRCode(false); // Concluir estado de geração
+      setGeneratingQRCode(false);
     }
   }, [clientId, totalAmount, sessionEmail, cpf, bookings, handleClearCart, traduzirErroPagamento]);
 
-  // Regenera o QR Code quando o tempo acaba
+  // Regenera o QR Code quando o tempo expira
   useEffect(() => {
     if (timeLeft === 0 && pixQRCode) {
       setPixQRCode(null);
@@ -109,7 +107,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     }
   }, [timeLeft, pixQRCode, generatePixQRCode]);
 
-  // Atualiza o contador quando o QR Code está disponível
+  // Atualiza o contador enquanto o QR Code está disponível
   useEffect(() => {
     if (pixQRCode && timeLeft > 0 && !generatingQRCode) {
       const interval = setInterval(() => {
@@ -120,6 +118,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     }
   }, [pixQRCode, timeLeft, generatingQRCode]);
 
+  // Função para copiar o link do Pix
   const handlePixLinkCopy = () => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(pixLink || "").then(
