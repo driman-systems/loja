@@ -11,15 +11,10 @@ import CreditCardPayment from "@/components/pagamento/CreditCardPayment";
 
 const PaymentPage = () => {
   const { cart, dispatch } = useCart();
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
-    "credit_card" | "pix"
-  >("credit_card");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"credit_card" | "pix">("credit_card");
   const { data: session } = useSession();
 
-  const totalAmount = cart.reduce(
-    (acc, item) => acc + item.price * item.quantity,
-    0
-  );
+  const totalAmount = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
   useEffect(() => {
     initMercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY!, {
@@ -48,8 +43,7 @@ const PaymentPage = () => {
       "Invalid payment_method_id": "Método de pagamento inválido.",
       "cc_rejected_insufficient_amount": "Saldo insuficiente no cartão.",
       "cc_rejected_high_risk": "Pagamento recusado por alto risco.",
-      "cc_rejected_bad_filled_card_number":
-        "Número do cartão preenchido incorretamente.",
+      "cc_rejected_bad_filled_card_number": "Número do cartão preenchido incorretamente.",
     };
 
     return erros[mensagemErro] || "Ocorreu um erro no pagamento.";
@@ -61,7 +55,7 @@ const PaymentPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
-      <div className="max-w-3xl w-full bg-gray-800 p-6 rounded-lg shadow-lg">
+      <div className="max-w-2xl w-full bg-gray-800 p-6 rounded-lg shadow-lg">
         <ToastContainer />
 
         <h2 className="text-xl mb-6">Escolha o método de pagamento</h2>
@@ -73,12 +67,12 @@ const PaymentPage = () => {
 
         {selectedPaymentMethod === "pix" && (
           <PixPayment
+            clientId={clientId || null} // Passando o clientId para PixPayment
             totalAmount={totalAmount}
             sessionEmail={session?.user.email || "guest"}
             handleClearCart={handleClearCart}
             traduzirErroPagamento={traduzirErroPagamento}
-            bookings={bookings}
-          />
+            bookings={bookings}          />
         )}
 
         {selectedPaymentMethod === "credit_card" && (

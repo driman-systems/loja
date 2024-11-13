@@ -36,6 +36,8 @@
     "react-loader-spinner": "^6.1.6",
     "react-quill": "^2.0.0",
     "react-toastify": "^10.0.6",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },

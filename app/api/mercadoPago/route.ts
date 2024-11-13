@@ -10,25 +10,26 @@ import crypto from 'crypto';
 const generateIdempotencyKey = () => crypto.randomBytes(16).toString('hex');
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-
   try {
-    console.log('Requisição recebida: ', body);
+    // Capturar e logar o body da requisição
+    const body = await req.json();
 
     // Validar se o clientId está presente
     if (!body.clientId) {
+      console.error('Erro: ClientId não fornecido.');
       return NextResponse.json({
         success: false,
         error: 'ClientId não fornecido.',
       });
     }
 
-    // Opcional: Validar se o clientId é válido e corresponde ao usuário autenticado
+    // Validar se o clientId é válido e corresponde ao usuário autenticado
     const client = await prisma.clientUser.findUnique({
       where: { id: body.clientId },
     });
 
     if (!client) {
+      console.error('Erro: ClientId inválido.');
       return NextResponse.json({
         success: false,
         error: 'ClientId inválido.',
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
     // Criar as reservas no banco de dados
     const createdBookings = await Promise.all(
       body.bookings.map(async (bookingData: any) => {
+
         const createdBooking = await prisma.booking.create({
           data: {
             productId: bookingData.productId,
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
             quantity: bookingData.quantity,
             price: bookingData.price,
             status: bookingData.status,
-            paymentStatus: 'Pendente', // Status inicial
+            paymentStatus: 'Pendente',
           },
         });
         return createdBooking;
@@ -84,13 +86,21 @@ export async function POST(req: NextRequest) {
       headers: {
         Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, // Seu access token do Mercado Pago
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': idempotencyKey, // Adicionando o header de idempotência
+        'X-Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify(paymentData),
     });
 
+    // Verificar resposta do Mercado Pago
+    if (!response.ok) {
+      console.error('Erro na resposta do Mercado Pago:', response.status, await response.text());
+      return NextResponse.json({
+        success: false,
+        error: 'Erro ao criar pagamento no Mercado Pago.',
+      });
+    }
+
     const result = await response.json();
-    console.log('Resposta da API do Mercado Pago:', result); // Log da resposta completa
 
     // Registrar o pagamento no banco de dados
     const createdPayment = await prisma.payment.create({
@@ -107,14 +117,13 @@ export async function POST(req: NextRequest) {
     });
 
     // Atualizar os status de pagamento das reservas com base no resultado do pagamento
-    const paymentStatus =
-      result.status === 'approved' ? 'Aprovado' : 'Aguardando Pagamento';
-
+    const paymentStatus = result.status === 'approved' ? 'Aprovado' : 'Aguardando Pagamento';
     await prisma.booking.updateMany({
       where: { id: { in: body.bookings.map((booking: any) => booking.id) } },
       data: { paymentStatus: paymentStatus },
     });
 
+    // Processamento do resultado do pagamento
     if (result.status === 'approved' || result.status === 'pending') {
       if (body.payment_method_id === 'pix') {
         const pointOfInteraction = result.point_of_interaction;
@@ -122,9 +131,8 @@ export async function POST(req: NextRequest) {
         if (pointOfInteraction && pointOfInteraction.transaction_data) {
           const pixQRCode = pointOfInteraction.transaction_data.qr_code_base64;
           const pixLink = pointOfInteraction.transaction_data.ticket_url;
-          const expirationDate = result.date_of_expiration; // Obter data de expiração
+          const expirationDate = result.date_of_expiration;
 
-          // Retornar QR Code, link de pagamento e data de expiração para o frontend
           return NextResponse.json({
             success: true,
             payment: {
@@ -142,12 +150,8 @@ export async function POST(req: NextRequest) {
           });
         }
       } else if (result.status === 'approved') {
-        // Para pagamentos com cartão de crédito aprovados imediatamente
-        // Enviar vouchers por e-mail
         await Promise.all(
           body.bookings.map(async (booking: any) => {
-            console.log(`Enviando voucher para booking ID: ${booking.id}`);
-
             const bookingDetails = await prisma.booking.findUnique({
               where: { id: booking.id },
               include: {
@@ -158,16 +162,12 @@ export async function POST(req: NextRequest) {
             });
 
             if (bookingDetails) {
-              // Gerar PDF e enviar e-mail
               const pdfBytes = await generateVoucherPDF(
                 bookingDetails,
                 bookingDetails.product,
                 bookingDetails.company
               );
 
-              console.log('Enviando voucher para:', bookingDetails.client.email);
-
-              // Enviar e-mail com o voucher em PDF
               await sendVoucherEmail(
                 bookingDetails.client.email,
                 Buffer.from(pdfBytes)
@@ -176,10 +176,8 @@ export async function POST(req: NextRequest) {
           })
         );
 
-        console.log('Pagamento criado com sucesso:', createdPayment);
         return NextResponse.json({ success: true, payment: createdPayment });
       } else {
-        // Pagamento está pendente (ex: boleto ou outros métodos)
         return NextResponse.json({ success: true, payment: createdPayment });
       }
     } else {

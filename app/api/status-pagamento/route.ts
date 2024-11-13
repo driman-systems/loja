@@ -1,34 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { Server as IOServer } from 'socket.io';
 
-export async function POST(request: NextRequest) {
+declare global {
+  var io: IOServer | undefined;
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { id: transactionId } = body.data;
+
+  if (!transactionId) {
+    console.error('Webhook não contém ID de transação.');
+    return NextResponse.json({ success: false, error: 'ID de transação ausente.' });
+  }
+
   try {
-    const body = await request.json();
-
-    // Capturar os detalhes do pagamento enviados no webhook
-    const { id: transactionId, status, status_detail: statusDetail, error_message: errorDetails } = body.data;
-
-    // Atualizar a tabela de pagamentos no banco de dados
-    const updatedPayment = await prisma.payment.updateMany({
-      where: { transactionId },
-      data: {
-        status: status ?? 'Pendente', // Atualiza o status com a informação mais recente
-        statusDetail,                 // Detalhes do status, como "approved", "pending", "rejected"
-        errorDetails: errorDetails ?? null,  // Salva os detalhes do erro, se existirem
+    const response = await fetch(`https://api.mercadopago.com/v1/payments/${transactionId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
       },
     });
 
-    // Se o pagamento foi atualizado com sucesso
-    if (updatedPayment) {
-      console.log('Pagamento atualizado com sucesso:', updatedPayment);
-      return NextResponse.json({ success: true });
-    } else {
-      console.error('Pagamento não encontrado para a transação:', transactionId);
-      return NextResponse.json({ success: false, error: 'Pagamento não encontrado' });
+    const paymentData = await response.json();
+    const { status } = paymentData;
+
+    await prisma.payment.updateMany({
+      where: { transactionId: transactionId.toString() },
+      data: { status: status ?? 'Pendente' },
+    });
+
+    if (status === 'approved') {
+      // Emite o evento de pagamento confirmado
+      if (global.io) {
+        global.io.emit('paymentConfirmed', { transactionId });
+        console.log(`Evento paymentConfirmed emitido para transactionId: ${transactionId}`);
+      } else {
+        console.error('Socket.io não está inicializado.');
+      }
     }
 
+    return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('Erro no webhook:', error);
+    console.error('Erro ao processar webhook:', error);
     return NextResponse.json({ success: false, error: error.message });
   }
 }
