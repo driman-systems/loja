@@ -1,23 +1,11 @@
-import NextAuth, { DefaultSession, NextAuthOptions } from "next-auth";
+// pages/api/auth/[...nextauth].ts
+
+import NextAuth, { NextAuthOptions, User, Session } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcrypt";
-
-declare module "next-auth" {
-    interface User {
-      role?: string;
-    }
-  
-    interface Session {
-      user: {
-        role?: string;
-      } & DefaultSession["user"];
-    }
-  
-    interface JWT {
-      role?: string;
-    }
-}
+import { JWT } from "next-auth/jwt";
+import { AdapterUser } from "next-auth/adapters";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -25,7 +13,7 @@ export const authOptions: NextAuthOptions = {
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" },
+        password: { label: "Senha", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -51,6 +39,7 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
+        // Verifica na tabela de clientes
         const clientUser = await prisma.clientUser.findUnique({
           where: { email: credentials.email },
         });
@@ -74,16 +63,20 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: JWT; user?: User | AdapterUser }) {
       if (user) {
+        token.id = user.id;
         token.role = user.role;
         token.image = user.image;
       }
       return token;
     },
-    async session({ session, token }) {
-      session.user.role = token.role as string | undefined;
-      session.user.image = token.image as string | null | undefined; 
+    async session({ session, token }: { session: Session; token: JWT }) {
+      if (token && session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.image = token.image; 
+      }
       return session;
     },
   },
