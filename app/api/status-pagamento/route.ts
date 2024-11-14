@@ -2,13 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 export async function POST(req: NextRequest) {
+  let body;
   try {
-    const body = await req.json();
+    // Obtém e valida o corpo da requisição
+    body = await req.json();
+  } catch (error: any) {
+    console.error("Erro ao analisar o corpo da requisição:", error.message);
+    return NextResponse.json({ success: false, error: "Erro ao analisar o corpo da requisição." }, { status: 400 });
+  }
 
+  try {
     const transactionId = body.data?.id;
     const status = body.data?.status;
     const statusDetail = body.data?.status_detail || null;
     const errorDetails = body.data?.error ? body.data.error.message : null;
+
+    if (!transactionId) {
+      console.error("Erro: ID de transação ausente na notificação.");
+      return NextResponse.json({ success: false, error: "ID de transação ausente." }, { status: 400 });
+    }
 
     // Atualizar o status do pagamento com detalhes e erros
     const updatedPayment = await prisma.payment.update({
@@ -42,8 +54,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Erro no webhook:", error);
 
-    // Atualiza o status do pagamento em caso de erro
-    const transactionId = await req.json().then(data => data.data?.id);
+    const transactionId = body?.data?.id;
 
     if (transactionId) {
       await prisma.payment.update({
@@ -55,6 +66,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: false, error: error.message });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
