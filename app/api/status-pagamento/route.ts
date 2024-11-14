@@ -5,40 +5,22 @@ export async function POST(req: NextRequest) {
   let body;
   try {
     body = await req.json();
-  } catch (error: any) {
-    console.error("Erro ao analisar o corpo da requisição:", error.message);
-    return NextResponse.json(
-      { success: false, error: "Erro ao analisar o corpo da requisição." },
-      { status: 400 }
-    );
-  }
+    console.log('Dados recebidos pelo webhook:', body); // Log para verificar o conteúdo do webhook
 
-  try {
     const transactionId = body.data?.id;
+    if (!transactionId) {
+      console.error("Erro: ID de transação ausente na notificação.");
+      return NextResponse.json({ success: false, error: "ID de transação ausente." }, { status: 400 });
+    }
+
     const status = body.data?.status;
     const statusDetail = body.data?.status_detail || null;
     const errorDetails = body.data?.error ? body.data.error.message : null;
 
-    console.log("Dados recebidos pelo webhook:", body);
-    console.log("ID da Transação:", transactionId);
-    console.log("Status:", status);
-    console.log("Detalhes do Status:", statusDetail);
-    console.log("Detalhes do Erro:", errorDetails);
+    console.log('Transaction ID recebido:', transactionId);
+    console.log('Status recebido:', status);
 
-    // Verifica se o transactionId existe no banco de dados
-    const paymentRecord = await prisma.payment.findUnique({
-      where: { transactionId: transactionId.toString() },
-    });
-
-    if (!paymentRecord) {
-      console.error(`Erro: Nenhum registro encontrado para transactionId ${transactionId}`);
-      return NextResponse.json(
-        { success: false, error: "Registro de pagamento não encontrado." },
-        { status: 404 }
-      );
-    }
-
-    // Atualiza o status do pagamento com detalhes e erros
+    // Atualizar o status do pagamento
     const updatedPayment = await prisma.payment.update({
       where: { transactionId: transactionId.toString() },
       data: {
@@ -48,12 +30,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    console.log("Pagamento atualizado no banco de dados:", updatedPayment);
-
-    // Atualiza os bookings, se o pagamento foi aprovado
     if (status === 'approved' && updatedPayment.bookingIds.length > 0) {
       const bookingIds = updatedPayment.bookingIds;
-
       await prisma.booking.updateMany({
         where: { id: { in: bookingIds } },
         data: {
@@ -61,21 +39,15 @@ export async function POST(req: NextRequest) {
           paymentStatus: 'Aprovado',
         },
       });
-      console.log("Bookings atualizados com sucesso:", bookingIds);
-    } else {
-      console.log("Status não aprovado ou não há bookings para atualizar.");
     }
 
-    // Emite o evento via Socket.io, se disponível
     if (global.io) {
       global.io.emit("paymentConfirmed", { transactionId, status });
-      console.log("Evento enviado para o Socket.io:", { transactionId, status });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Erro no webhook:", error);
-
     if (body?.data?.id) {
       await prisma.payment.update({
         where: { transactionId: body.data.id.toString() },
@@ -85,10 +57,6 @@ export async function POST(req: NextRequest) {
         },
       });
     }
-
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
