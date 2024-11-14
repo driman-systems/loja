@@ -4,29 +4,37 @@ import prisma from '@/lib/prisma';
 export async function POST(req: NextRequest) {
   let body;
   try {
-    // Obtém e valida o corpo da requisição
+    // Tenta parsear o corpo da requisição para JSON
     body = await req.json();
-    console.log("Corpo da requisição recebido:", body);
   } catch (error: any) {
     console.error("Erro ao analisar o corpo da requisição:", error.message);
-    return NextResponse.json({ success: false, error: "Erro ao analisar o corpo da requisição." }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: "Erro ao analisar o corpo da requisição." },
+      { status: 400 }
+    );
   }
 
   try {
-    const transactionId = body.data?.id;
+    // Extrai os dados necessários
+    const transactionId = body.data?.id; // Obtendo o ID da transação
     const status = body.data?.status;
     const statusDetail = body.data?.status_detail || null;
     const errorDetails = body.data?.error ? body.data.error.message : null;
 
-    console.log("Dados do webhook:");
-    console.log("Transaction ID:", transactionId);
+    // Verificações e logs para garantir que estamos pegando os dados corretos
+    console.log("Dados recebidos pelo webhook:", body);
+    console.log("ID da Transação:", transactionId);
     console.log("Status:", status);
-    console.log("Status Detail:", statusDetail);
-    console.log("Error Details:", errorDetails);
+    console.log("Detalhes do Status:", statusDetail);
+    console.log("Detalhes do Erro:", errorDetails);
 
+    // Verifica se o transactionId existe
     if (!transactionId) {
       console.error("Erro: ID de transação ausente na notificação.");
-      return NextResponse.json({ success: false, error: "ID de transação ausente." }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "ID de transação ausente." },
+        { status: 400 }
+      );
     }
 
     // Atualizar o status do pagamento com detalhes e erros
@@ -38,13 +46,13 @@ export async function POST(req: NextRequest) {
         errorDetails,
       },
     });
+
     console.log("Pagamento atualizado no banco de dados:", updatedPayment);
 
-    // Se o pagamento foi aprovado, atualizar bookings
+    // Se o pagamento foi aprovado, atualizar os bookings associados
     if (status === 'approved' && updatedPayment.bookingIds.length > 0) {
       const bookingIds = updatedPayment.bookingIds;
 
-      console.log("Atualizando bookings com os IDs:", bookingIds);
       await prisma.booking.updateMany({
         where: { id: { in: bookingIds } },
         data: {
@@ -52,34 +60,35 @@ export async function POST(req: NextRequest) {
           paymentStatus: 'Aprovado',
         },
       });
-      console.log("Bookings atualizados com sucesso.");
+      console.log("Bookings atualizados com sucesso:", bookingIds);
     } else {
       console.log("Status não aprovado ou não há bookings para atualizar.");
     }
 
-    // Envia um evento via Socket.io para o frontend
+    // Envia um evento via Socket.io para o frontend, se aplicável
     if (global.io) {
-      console.log("Emitindo evento via Socket.io");
       global.io.emit("paymentConfirmed", { transactionId, status });
+      console.log("Evento enviado para o Socket.io:", { transactionId, status });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Erro no webhook:", error);
 
-    const transactionId = body?.data?.id;
-
-    if (transactionId) {
+    // Atualiza o status do pagamento em caso de erro
+    if (body?.data?.id) {
       await prisma.payment.update({
-        where: { transactionId: transactionId.toString() },
+        where: { transactionId: body.data.id.toString() },
         data: {
           status: "Erro",
           errorDetails: error.message,
         },
       });
-      console.log("Erro registrado no banco de dados para o pagamento:", transactionId);
     }
 
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
