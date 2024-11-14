@@ -6,6 +6,7 @@ export async function POST(req: NextRequest) {
   try {
     // Obtém e valida o corpo da requisição
     body = await req.json();
+    console.log("Corpo da requisição recebido:", body);
   } catch (error: any) {
     console.error("Erro ao analisar o corpo da requisição:", error.message);
     return NextResponse.json({ success: false, error: "Erro ao analisar o corpo da requisição." }, { status: 400 });
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest) {
     const status = body.data?.status;
     const statusDetail = body.data?.status_detail || null;
     const errorDetails = body.data?.error ? body.data.error.message : null;
+
+    console.log("Dados do webhook:");
+    console.log("Transaction ID:", transactionId);
+    console.log("Status:", status);
+    console.log("Status Detail:", statusDetail);
+    console.log("Error Details:", errorDetails);
 
     if (!transactionId) {
       console.error("Erro: ID de transação ausente na notificação.");
@@ -31,11 +38,13 @@ export async function POST(req: NextRequest) {
         errorDetails,
       },
     });
+    console.log("Pagamento atualizado no banco de dados:", updatedPayment);
 
     // Se o pagamento foi aprovado, atualizar bookings
     if (status === 'approved' && updatedPayment.bookingIds.length > 0) {
       const bookingIds = updatedPayment.bookingIds;
 
+      console.log("Atualizando bookings com os IDs:", bookingIds);
       await prisma.booking.updateMany({
         where: { id: { in: bookingIds } },
         data: {
@@ -43,10 +52,14 @@ export async function POST(req: NextRequest) {
           paymentStatus: 'Aprovado',
         },
       });
+      console.log("Bookings atualizados com sucesso.");
+    } else {
+      console.log("Status não aprovado ou não há bookings para atualizar.");
     }
 
     // Envia um evento via Socket.io para o frontend
     if (global.io) {
+      console.log("Emitindo evento via Socket.io");
       global.io.emit("paymentConfirmed", { transactionId, status });
     }
 
@@ -64,6 +77,7 @@ export async function POST(req: NextRequest) {
           errorDetails: error.message,
         },
       });
+      console.log("Erro registrado no banco de dados para o pagamento:", transactionId);
     }
 
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
