@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { Server } from 'socket.io';
 
 const token = process.env.MP_ACCESS_TOKEN;
+
+const io = new Server();
+
+global.io = io;
+
+io.on('connection', (socket) => {
+  console.log('Novo cliente conectado:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('Cliente desconectado:', socket.id);
+  });
+});
 
 export async function POST(req: NextRequest) {
   let body;
   try {
-    // Recebe os dados do webhook e extrai o transactionId
     body = await req.json();
-    console.log('Dados recebidos pelo webhook:', body);
 
     const transactionId = body.data?.id;
     if (!transactionId) {
@@ -16,7 +27,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "ID de transação ausente." }, { status: 400 });
     }
 
-    // Faz uma requisição para obter os detalhes completos do pagamento
     const paymentDetailsResponse = await fetch(`https://api.mercadopago.com/v1/payments/${transactionId}`, {
       method: 'GET',
       headers: {
@@ -30,7 +40,6 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentDetails = await paymentDetailsResponse.json();
-    console.log('Detalhes do pagamento:', paymentDetails);
 
     // Obtém o status e outros detalhes do pagamento
     const status = paymentDetails.status;
@@ -65,7 +74,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Emite um evento via Socket.io para o frontend, se configurado
     if (global.io) {
       global.io.emit("paymentConfirmed", { transactionId, status });
     }
