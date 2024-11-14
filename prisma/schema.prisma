@@ -14,17 +14,17 @@ model Product {
   price               Float
   promoPrice          Float?
   hasDateReservation  Boolean
-  reservationDays     Int[]    
+  reservationDays     Int[]
   hasTimeReservation  Boolean
-  reservationTimes    Json?    
-  reservationLimits   Json?    
-  maxReservationsPerDay Int?   
+  reservationTimes    Json?
+  reservationLimits   Json?
+  maxReservationsPerDay Int?
   includedItems       String[]
   notIncludedItems    String[]
   image               String?
   companyId           String
   company             Company  @relation(fields: [companyId], references: [id])
-  bookings            Booking[]  
+  bookings            Booking[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -33,11 +33,11 @@ model AdminUser {
   id          String   @id @default(cuid())
   email       String   @unique
   password    String
-  role        String  
+  role        String
   name        String
   phoneNumber String?
-  cpf         String?  @unique  
-  image       String?  
+  cpf         String?  @unique
+  image       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -50,10 +50,10 @@ model ClientUser {
   name        String
   cpf         String   @unique
   phoneNumber String?
-  estado      String?  
-  cidade      String?  
-  birthDate   DateTime?  
-  bookings    Booking[] 
+  estado      String?
+  cidade      String?
+  birthDate   DateTime?
+  bookings    Booking[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -78,7 +78,7 @@ model Company {
   status            String     @default("Ativa")
   logo              String?
   products          Product[]
-  bookings          Booking[]  
+  bookings          Booking[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -104,17 +104,18 @@ model Booking {
 
 
 model Payment {
-  id                 String     @id @default(cuid())
-  transactionId      String?    @unique
-  transactionAmount  Float
-  status             String     @default("Pendente")
-  installments       Int?
-  payerEmail         String?  
-  createdAt          DateTime   @default(now())
-  paymentMethod      String
-  bookingIds         String[]  
-  statusDetail       String?    
-  errorDetails       String?   
+  id                String     @id @default(uuid())
+  transactionId     String     @unique
+  status            String?
+  statusDetail      String?
+  errorDetails      String?
+  transactionAmount Float?
+  payerEmail        String?
+  dateApproved      DateTime?
+  paymentMethod     String?
+  bookingIds        String[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @default(now()) @updatedAt
 }
 
 

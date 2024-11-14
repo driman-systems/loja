@@ -6,6 +6,7 @@ const token = process.env.MP_ACCESS_TOKEN;
 export async function POST(req: NextRequest) {
   let body;
   try {
+    // Recebe os dados do webhook e extrai o transactionId
     body = await req.json();
     console.log('Dados recebidos pelo webhook:', body);
 
@@ -19,30 +20,40 @@ export async function POST(req: NextRequest) {
     const paymentDetailsResponse = await fetch(`https://api.mercadopago.com/v1/payments/${transactionId}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`, // Substitua pelo seu token de acesso
+        'Authorization': `Bearer ${token}`,
       },
     });
 
+    if (!paymentDetailsResponse.ok) {
+      console.error("Erro ao buscar detalhes do pagamento na API do Mercado Pago:", await paymentDetailsResponse.text());
+      return NextResponse.json({ success: false, error: "Erro ao buscar detalhes do pagamento." }, { status: 500 });
+    }
+
     const paymentDetails = await paymentDetailsResponse.json();
+    console.log('Detalhes do pagamento:', paymentDetails);
 
     // Obtém o status e outros detalhes do pagamento
     const status = paymentDetails.status;
     const statusDetail = paymentDetails.status_detail || null;
-    const errorDetails = paymentDetails.error ? paymentDetails.error.message : null;
+    const transactionAmount = paymentDetails.transaction_amount;
+    const payerEmail = paymentDetails.payer?.email || null;
+    const dateApproved = paymentDetails.date_approved || null;
+    const paymentMethod = paymentDetails.payment_method_id || null;
 
-    console.log('Detalhes do pagamento:', paymentDetails);
-
-    // Atualiza o status do pagamento no banco de dados
+    // Atualiza o status do pagamento no banco de dados com os novos detalhes
     const updatedPayment = await prisma.payment.update({
       where: { transactionId: transactionId.toString() },
       data: {
         status,
         statusDetail,
-        errorDetails,
+        transactionAmount,
+        payerEmail,
+        dateApproved,
+        paymentMethod,
       },
     });
 
-    // Se o pagamento foi aprovado, atualizar os bookings associados
+    // Se o pagamento foi aprovado, atualiza os bookings associados
     if (status === 'approved' && updatedPayment.bookingIds.length > 0) {
       const bookingIds = updatedPayment.bookingIds;
       await prisma.booking.updateMany({
@@ -54,7 +65,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Envia um evento via Socket.io para o frontend
+    // Emite um evento via Socket.io para o frontend, se configurado
     if (global.io) {
       global.io.emit("paymentConfirmed", { transactionId, status });
     }
@@ -62,6 +73,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Erro no webhook:", error);
+
+    // Em caso de erro, tenta atualizar o pagamento com o status de erro
     if (body?.data?.id) {
       await prisma.payment.update({
         where: { transactionId: body.data.id.toString() },
@@ -71,6 +84,7 @@ export async function POST(req: NextRequest) {
         },
       });
     }
+
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
