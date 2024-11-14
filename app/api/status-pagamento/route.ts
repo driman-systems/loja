@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
     const statusDetail = body.data?.status_detail || null;
     const errorDetails = body.data?.error ? body.data.error.message : null;
 
+    console.log(body)
+
     if (!transactionId) {
       return NextResponse.json({ success: false, error: "ID de transação ausente." }, { status: 400 });
     }
