@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
+const token = process.env.MP_ACCESS_TOKEN;
+
 export async function POST(req: NextRequest) {
   let body;
   try {
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest) {
     const paymentDetailsResponse = await fetch(`https://api.mercadopago.com/v1/payments/${transactionId}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer YOUR_ACCESS_TOKEN`, // Substitua pelo seu token de acesso
+        'Authorization': `Bearer ${token}`, // Substitua pelo seu token de acesso
       },
     });
 
