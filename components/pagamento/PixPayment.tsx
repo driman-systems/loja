@@ -1,9 +1,8 @@
-"use client"
+"use client";
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
-import Ably from 'ably';
 
 interface PixPaymentProps {
   totalAmount: number;
@@ -30,35 +29,10 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [generatingQRCode, setGeneratingQRCode] = useState<boolean>(false);
   const [timeLeft, setTimeLeft] = useState<number>(120);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
   const router = useRouter();
 
-  const ablyKey = process.env.NEXT_PUBLIC_ABLY_API_KEY!
-
-  // Conectar ao Ably e escutar eventos de pagamento
-  useEffect(() => {
-    const ably = new Ably.Realtime({ key: ablyKey });
-    const channel = ably.channels.get("paymentStatus");
-
-    const handleMessage = (message: any) => {
-      // Simplificando a tipagem do `message`
-      const { transactionId, status, message: userMessage } = message.data;
-      toast.info(userMessage, { position: "top-center" });
-
-      if (status === "approved") {
-        handleClearCart();
-        router.push(`/sucesso/${transactionId}`);
-      }
-    };
-
-    channel.subscribe("paymentStatusUpdate", handleMessage);
-
-    // Cleanup para desinscrever o listener e fechar a conexão ao desmontar o componente
-    return () => {
-      channel.unsubscribe("paymentStatusUpdate", handleMessage);
-    };
-  }, [router, handleClearCart, ablyKey]);
-
-  // Formatação do tempo em MM:SS
+  // Função para formatar o tempo em MM:SS
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -100,12 +74,11 @@ const PixPayment: React.FC<PixPaymentProps> = ({
         handleClearCart();
         setPixQRCode(paymentResult.payment.pixQRCode);
         setPixLink(paymentResult.payment.pixLink);
+        setTransactionId(paymentResult.payment.transactionId);
         toast.success("QR Code gerado com sucesso!", { position: "top-center" });
       } else {
         setError(traduzirErroPagamento(paymentResult.error));
-        toast.error(traduzirErroPagamento(paymentResult.error), {
-          position: "top-center",
-        });
+        toast.error(traduzirErroPagamento(paymentResult.error), { position: "top-center" });
       }
     } catch (err) {
       setError("Ocorreu um erro no pagamento.");
@@ -115,6 +88,48 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setGeneratingQRCode(false);
     }
   }, [clientId, totalAmount, sessionEmail, cpf, bookings, handleClearCart, traduzirErroPagamento]);
+
+  // Função de polling para verificar o status do pagamento
+  useEffect(() => {
+    if (!transactionId) return;
+
+    const checkPaymentStatus = async () => {
+      try {
+        const response = await fetch("/api/status-pagamento", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { id: transactionId } }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          if (data.status === "approved") {
+            toast.success("Pagamento aprovado com sucesso!");
+            handleClearCart();
+            router.push(`/sucesso/${transactionId}`);
+            return;
+          } else if (data.status === "rejected") {
+            toast.error("Pagamento rejeitado. Tente novamente.");
+            setError("Pagamento rejeitado.");
+            return;
+          }
+        } else {
+          console.error("Erro ao consultar status:", data.error);
+        }
+      } catch (error) {
+        console.error("Erro ao consultar status:", error);
+      }
+    };
+
+    // Intervalo de polling a cada 5 segundos
+    const intervalId = setInterval(() => {
+      checkPaymentStatus();
+    }, 5000);
+
+    // Limpa o polling quando o componente desmonta ou o pagamento é concluído
+    return () => clearInterval(intervalId);
+  }, [transactionId, handleClearCart, router]);
 
   // Regenera o QR Code quando o tempo acaba
   useEffect(() => {
