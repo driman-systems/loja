@@ -104,18 +104,21 @@ model Booking {
 
 
 model Payment {
-  id              Int      @id @default(autoincrement())
-  transactionId   String   @unique
-  status          String
-  statusDetail    String?
-  transactionAmount Float
-  payerEmail      String?
-  dateApproved    DateTime?
-  paymentMethod   String?
-  statusMessage   String?
-  lastUpdated     DateTime?
-  bookingIds      Int[]
-  errorDetails    String?
+  id                String     @id @default(uuid())
+  transactionId     String     @unique
+  status            String?
+  statusDetail      String?
+  errorDetails      String?
+  transactionAmount Float?
+  payerEmail        String?
+  dateApproved      DateTime?
+  paymentMethod     String?
+  installments      Int?
+  statusMessage     String?
+  lastUpdated       DateTime?
+  bookingIds        String[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @default(now()) @updatedAt
 }
 
 
