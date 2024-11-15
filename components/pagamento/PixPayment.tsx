@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
-import io, { Socket } from "socket.io-client";
+import Ably from 'ably';
 
 interface PixPaymentProps {
   totalAmount: number;
@@ -13,8 +13,6 @@ interface PixPaymentProps {
   clientId: string | null;
   expirationDate?: string;
 }
-
-let socket: Socket;
 
 const PixPayment: React.FC<PixPaymentProps> = ({
   totalAmount,
@@ -33,27 +31,37 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const router = useRouter();
 
+  // Conectar ao Ably e escutar eventos de pagamento
+  useEffect(() => {
+    const ably = new Ably.Realtime({ key: process.env.NEXT_PUBLIC_ABLY_API_KEY! });
+    const channel = ably.channels.get("paymentStatus");
+
+    const handleMessage = (message: any) => {
+      // Simplificando a tipagem do `message`
+      const { transactionId, status, message: userMessage } = message.data;
+      toast.info(userMessage, { position: "top-center" });
+
+      if (status === "approved") {
+        handleClearCart();
+        router.push(`/sucesso/${transactionId}`);
+      }
+    };
+
+    channel.subscribe("paymentStatusUpdate", handleMessage);
+
+    // Cleanup para desinscrever o listener e fechar a conexão ao desmontar o componente
+    return () => {
+      channel.unsubscribe("paymentStatusUpdate", handleMessage);
+      ably.close();
+    };
+  }, [router, handleClearCart]);
+
   // Formatação do tempo em MM:SS
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
   };
-
-  // Conectar ao Socket.io
-  useEffect(() => {
-    socket = io({ path: "/api/socket" });
-
-    socket.on("paymentConfirmed", ({ transactionId }) => {
-      toast.success("Pagamento confirmado!");
-      handleClearCart();
-      router.push(`/sucesso/${transactionId}`);
-    });
-
-    return () => {
-      socket.off("paymentConfirmed");
-    };
-  }, [router, handleClearCart]);
 
   // Função para gerar o QR Code Pix
   const generatePixQRCode = useCallback(async () => {
@@ -63,7 +71,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     }
 
     setLoading(true);
-    setGeneratingQRCode(true); 
+    setGeneratingQRCode(true);
     setTimeLeft(120);
 
     const paymentData = {
