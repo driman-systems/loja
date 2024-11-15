@@ -30,6 +30,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [generatingQRCode, setGeneratingQRCode] = useState<boolean>(false);
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [paymentApproved, setPaymentApproved] = useState<boolean>(false);
   const router = useRouter();
 
   // Função para formatar o tempo em MM:SS
@@ -45,11 +46,11 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setError("Por favor, insira seu CPF.");
       return;
     }
-  
+
     setLoading(true);
     setGeneratingQRCode(true);
     setTimeLeft(120);
-  
+
     const paymentData = {
       clientId,
       transaction_amount: totalAmount,
@@ -60,24 +61,21 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       },
       bookings,
     };
-  
+
     try {
       const paymentResponse = await fetch("/api/mercadoPago", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentData),
       });
-  
+
       const paymentResult = await paymentResponse.json();
 
-      console.log("Resposta completa do backend para QR Code:", paymentResult);
-  
       if (paymentResult.success) {
         handleClearCart();
         setPixQRCode(paymentResult.payment.pixQRCode);
         setPixLink(paymentResult.payment.pixLink);
         setTransactionId(paymentResult.payment.id);
-        console.log("Transaction ID definido:", paymentResult.payment.transactionId); // Log após definir transactionId
         toast.success("QR Code gerado com sucesso!", { position: "top-center" });
       } else {
         setError(traduzirErroPagamento(paymentResult.error));
@@ -91,33 +89,32 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setGeneratingQRCode(false);
     }
   }, [clientId, totalAmount, sessionEmail, cpf, bookings, handleClearCart, traduzirErroPagamento]);
-  
 
   // Função de polling para verificar o status do pagamento
   useEffect(() => {
-    console.log(transactionId)
-    if (!transactionId) return;
+    if (!transactionId || paymentApproved) return; // Interrompe o polling se o pagamento já foi aprovado
 
     const checkPaymentStatus = async () => {
       try {
-        console.log("Verificando status do pagamento para transactionId:", transactionId);
         const response = await fetch("/api/check-payment-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transactionId }),
+          body: JSON.stringify({ data: { id: transactionId } }),
         });
 
         const data = await response.json();
-        console.log("Resposta recebida para status do pagamento:", data);
 
         if (data.success) {
           if (data.status === "approved") {
-            toast.success("Pagamento aprovado com sucesso!");
-            handleClearCart();
-            router.push(`/sucesso/${transactionId}`);
+            if (!paymentApproved) { // Evita o toast repetido
+              toast.success("Pagamento aprovado com sucesso!", { position: "top-center" });
+              setPaymentApproved(true);
+              handleClearCart();
+              router.push(`/sucesso/${transactionId}`);
+            }
             return;
           } else if (data.status === "rejected") {
-            toast.error("Pagamento rejeitado. Tente novamente.");
+            toast.error("Pagamento rejeitado. Tente novamente.", { position: "top-center" });
             setError("Pagamento rejeitado.");
             return;
           }
@@ -136,7 +133,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
 
     // Limpa o polling quando o componente desmonta ou o pagamento é concluído
     return () => clearInterval(intervalId);
-  }, [transactionId, handleClearCart, router]);
+  }, [transactionId, handleClearCart, router, paymentApproved]);
 
   // Regenera o QR Code quando o tempo acaba
   useEffect(() => {

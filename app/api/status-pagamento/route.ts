@@ -7,8 +7,7 @@ export async function POST(req: NextRequest) {
   let body;
   try {
     body = await req.json();
-    console.log('Dados recebidos pelo webhook:', body);
-
+    
     const transactionId = body.data?.id;
     if (!transactionId) {
       console.error("Erro: ID de transação ausente na notificação.");

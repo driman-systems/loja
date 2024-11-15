@@ -5,10 +5,8 @@ export async function POST(req: NextRequest) {
   try {
     // Logando o body da requisição para verificar se o transactionId está correto
     const body = await req.json();
-    console.log('Body recebido:', body);
 
-    const transactionId = body.data?.id;
-    console.log('Transaction ID recebido:', transactionId);
+    const transactionId = body.data?.id.toString();
 
     if (!transactionId) {
       console.error("Erro: ID de transação ausente na notificação.");
@@ -19,8 +17,6 @@ export async function POST(req: NextRequest) {
     const paymentStatus = await prisma.payment.findUnique({
       where: { transactionId },
     });
-
-    console.log('Status do pagamento encontrado:', paymentStatus);
 
     if (!paymentStatus) {
       console.error("Erro: Pagamento não encontrado no banco de dados.");
