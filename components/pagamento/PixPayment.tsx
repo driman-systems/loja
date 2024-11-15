@@ -95,10 +95,10 @@ const PixPayment: React.FC<PixPaymentProps> = ({
 
     const checkPaymentStatus = async () => {
       try {
-        const response = await fetch("/api/status-pagamento", {
+        const response = await fetch("/api/check-payment-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: { id: transactionId } }),
+          body: JSON.stringify({ transactionId }),
         });
 
         const data = await response.json();
@@ -122,7 +122,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       }
     };
 
-    // Intervalo de polling a cada 5 segundos
+    // Intervalo de polling a cada 2 segundos
     const intervalId = setInterval(() => {
       checkPaymentStatus();
     }, 2000);

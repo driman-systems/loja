@@ -32,30 +32,10 @@ export async function POST(req: NextRequest) {
 
     // Atualizar o status do pagamento no banco de dados
     const status = paymentDetails.status;
-    const updatedPayment = await prisma.payment.update({
-      where: { transactionId: transactionId.toString() },
-      data: {
-        status,
-        statusDetail: paymentDetails.status_detail || null,
-        transactionAmount: paymentDetails.transaction_amount,
-        payerEmail: paymentDetails.payer?.email || null,
-        dateApproved: paymentDetails.date_approved || null,
-        paymentMethod: paymentDetails.payment_method_id || null,
-      },
-    });
-
-    // Determinar a mensagem de resposta com base no status
     let userMessage;
     switch (status) {
       case 'approved':
         userMessage = "Pagamento aprovado com sucesso!";
-        // Atualizar bookings associados
-        if (updatedPayment.bookingIds.length > 0) {
-          await prisma.booking.updateMany({
-            where: { id: { in: updatedPayment.bookingIds } },
-            data: { status: 'Confirmado', paymentStatus: 'Aprovado' },
-          });
-        }
         break;
       case 'pending':
         userMessage = "Pagamento pendente. Aguarde a confirmação.";
@@ -71,6 +51,29 @@ export async function POST(req: NextRequest) {
         break;
     }
 
+    const updatedPayment = await prisma.payment.update({
+      where: { transactionId: transactionId.toString() },
+      data: {
+        status,
+        statusDetail: paymentDetails.status_detail || null,
+        transactionAmount: paymentDetails.transaction_amount,
+        payerEmail: paymentDetails.payer?.email || null,
+        dateApproved: paymentDetails.date_approved || null,
+        paymentMethod: paymentDetails.payment_method_id || null,
+        statusMessage: userMessage, // Armazena a mensagem de status
+        lastUpdated: new Date(),    // Atualiza a data da última modificação (opcional)
+      },
+    });
+
+    // Atualizar bookings associados se o pagamento for aprovado
+    if (status === 'approved' && updatedPayment.bookingIds.length > 0) {
+      const bookingIdsAsString = updatedPayment.bookingIds.map(id => id.toString());
+        await prisma.booking.updateMany({
+          where: { id: { in: bookingIdsAsString } },
+          data: { status: 'Confirmado', paymentStatus: 'Aprovado' },
+        });
+    }
+
     return NextResponse.json({ success: true, status, message: userMessage });
   } catch (error: any) {
     console.error("Erro no webhook:", error);
@@ -78,7 +81,7 @@ export async function POST(req: NextRequest) {
     if (body?.data?.id) {
       await prisma.payment.update({
         where: { transactionId: body.data.id.toString() },
-        data: { status: "Erro", errorDetails: error.message },
+        data: { status: "Erro", errorDetails: error.message, lastUpdated: new Date() },
       });
     }
 
