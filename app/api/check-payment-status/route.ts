@@ -3,49 +3,37 @@ import prisma from '@/lib/prisma';
 
 export async function POST(req: NextRequest) {
   try {
+    // Logando o body da requisição para verificar se o transactionId está correto
     const body = await req.json();
-    const { transactionId } = body;
+    console.log('Body recebido:', body);
+
+    const transactionId = body.data?.id;
+    console.log('Transaction ID recebido:', transactionId);
 
     if (!transactionId) {
-      return NextResponse.json(
-        { success: false, error: 'Transaction ID is required' },
-        { status: 400 }
-      );
+      console.error("Erro: ID de transação ausente na notificação.");
+      return NextResponse.json({ success: false, error: "ID de transação ausente." }, { status: 400 });
     }
 
-    // Consulta o status do pagamento no banco de dados
-    const payment = await prisma.payment.findUnique({
-      where: { transactionId: transactionId.toString() },
-      select: {
-        status: true,
-        statusDetail: true,
-        transactionAmount: true,
-        errorDetails: true,
-        dateApproved: true,
-      },
+    // Buscando detalhes no banco para o transactionId
+    const paymentStatus = await prisma.payment.findUnique({
+      where: { transactionId },
     });
 
-    if (!payment) {
-      return NextResponse.json(
-        { success: false, error: 'Payment not found' },
-        { status: 404 }
-      );
+    console.log('Status do pagamento encontrado:', paymentStatus);
+
+    if (!paymentStatus) {
+      console.error("Erro: Pagamento não encontrado no banco de dados.");
+      return NextResponse.json({ success: false, error: "Pagamento não encontrado." }, { status: 404 });
     }
 
-    // Retorna o status e os detalhes do pagamento
     return NextResponse.json({
       success: true,
-      status: payment.status,
-      statusDetail: payment.statusDetail,
-      transactionAmount: payment.transactionAmount,
-      dateApproved: payment.dateApproved,
-      errorDetails: payment.errorDetails,
+      status: paymentStatus.status,
+      message: paymentStatus.statusMessage,
     });
   } catch (error: any) {
-    console.error('Erro ao buscar status do pagamento:', error);
-    return NextResponse.json(
-      { success: false, error: 'Erro ao buscar status do pagamento' },
-      { status: 500 }
-    );
+    console.error("Erro ao consultar status do pagamento:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

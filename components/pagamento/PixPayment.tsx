@@ -45,11 +45,11 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setError("Por favor, insira seu CPF.");
       return;
     }
-
+  
     setLoading(true);
     setGeneratingQRCode(true);
     setTimeLeft(120);
-
+  
     const paymentData = {
       clientId,
       transaction_amount: totalAmount,
@@ -60,21 +60,24 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       },
       bookings,
     };
-
+  
     try {
       const paymentResponse = await fetch("/api/mercadoPago", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentData),
       });
-
+  
       const paymentResult = await paymentResponse.json();
 
+      console.log("Resposta completa do backend para QR Code:", paymentResult);
+  
       if (paymentResult.success) {
         handleClearCart();
         setPixQRCode(paymentResult.payment.pixQRCode);
         setPixLink(paymentResult.payment.pixLink);
-        setTransactionId(paymentResult.payment.transactionId);
+        setTransactionId(paymentResult.payment.id);
+        console.log("Transaction ID definido:", paymentResult.payment.transactionId); // Log após definir transactionId
         toast.success("QR Code gerado com sucesso!", { position: "top-center" });
       } else {
         setError(traduzirErroPagamento(paymentResult.error));
@@ -88,13 +91,16 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setGeneratingQRCode(false);
     }
   }, [clientId, totalAmount, sessionEmail, cpf, bookings, handleClearCart, traduzirErroPagamento]);
+  
 
   // Função de polling para verificar o status do pagamento
   useEffect(() => {
+    console.log(transactionId)
     if (!transactionId) return;
 
     const checkPaymentStatus = async () => {
       try {
+        console.log("Verificando status do pagamento para transactionId:", transactionId);
         const response = await fetch("/api/check-payment-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -102,6 +108,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
         });
 
         const data = await response.json();
+        console.log("Resposta recebida para status do pagamento:", data);
 
         if (data.success) {
           if (data.status === "approved") {
