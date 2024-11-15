@@ -125,7 +125,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     // Intervalo de polling a cada 5 segundos
     const intervalId = setInterval(() => {
       checkPaymentStatus();
-    }, 5000);
+    }, 2000);
 
     // Limpa o polling quando o componente desmonta ou o pagamento é concluído
     return () => clearInterval(intervalId);
