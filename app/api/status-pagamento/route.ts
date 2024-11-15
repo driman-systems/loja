@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import Ably from 'ably'; // Importação correta para o Ably
+import Ably from 'ably';
 
 const token = process.env.MP_ACCESS_TOKEN;
-const ablyApiKey = process.env.ABLY_API_KEY!; // Certifique-se de que a chave está no arquivo .env
+const ablyApiKey = process.env.NEXT_PUBLIC_ABLY_API_KEY!;
 
-// Inicializando o cliente Ably usando diretamente o Realtime
-const ably = new Ably.Realtime(ablyApiKey);
+// Inicializando o cliente Ably com configuração básica
+const ably = new Ably.Realtime({ key: ablyApiKey });
 
 export async function POST(req: NextRequest) {
   let body;
@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
     const paymentDetails = await paymentDetailsResponse.json();
 
     // Obtém o status e outros detalhes do pagamento
-    const status = paymentDetails.status; // Pode ser "approved", "pending", "in_process", "rejected"
-    const statusDetail = paymentDetails.status_detail || null; // Detalhe específico do status
+    const status = paymentDetails.status;
+    const statusDetail = paymentDetails.status_detail || null;
     const transactionAmount = paymentDetails.transaction_amount;
     const payerEmail = paymentDetails.payer?.email || null;
     const dateApproved = paymentDetails.date_approved || null;
@@ -56,14 +56,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Emite um evento de status específico para o frontend
+    // Envia o evento de status específico para o frontend
     const channel = ably.channels.get('paymentStatus');
     let userMessage;
 
     switch (status) {
       case 'approved':
         userMessage = "Pagamento aprovado com sucesso!";
-        // Atualiza o status dos bookings associados
         if (updatedPayment.bookingIds.length > 0) {
           const bookingIds = updatedPayment.bookingIds;
           await prisma.booking.updateMany({
@@ -75,32 +74,27 @@ export async function POST(req: NextRequest) {
           });
         }
         break;
-
       case 'pending':
         userMessage = "Pagamento pendente. Aguarde a confirmação.";
         break;
-
       case 'in_process':
         userMessage = "Pagamento em processamento. Verificaremos em breve.";
         break;
-
       case 'rejected':
         userMessage = "Pagamento rejeitado. Tente novamente ou utilize outro método.";
         break;
-
       default:
         userMessage = "Status de pagamento desconhecido. Entre em contato com o suporte.";
         break;
     }
 
-    // Envia o evento via Ably com o status detalhado
-    channel.publish('paymentStatusUpdate', { transactionId, status, message: userMessage });
+    // Publica o evento de atualização de status para o canal do Ably
+    await channel.publish('paymentStatusUpdate', { transactionId, status, message: userMessage });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Erro no webhook:", error);
 
-    // Em caso de erro, tenta atualizar o pagamento com o status de erro
     if (body?.data?.id) {
       await prisma.payment.update({
         where: { transactionId: body.data.id.toString() },

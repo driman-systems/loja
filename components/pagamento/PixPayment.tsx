@@ -32,9 +32,11 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const router = useRouter();
 
+  const ablyKey = process.env.NEXT_PUBLIC_ABLY_API_KEY!
+
   // Conectar ao Ably e escutar eventos de pagamento
   useEffect(() => {
-    const ably = new Ably.Realtime({ key: process.env.NEXT_PUBLIC_ABLY_API_KEY! });
+    const ably = new Ably.Realtime({ key: ablyKey });
     const channel = ably.channels.get("paymentStatus");
 
     const handleMessage = (message: any) => {
@@ -53,9 +55,8 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     // Cleanup para desinscrever o listener e fechar a conexão ao desmontar o componente
     return () => {
       channel.unsubscribe("paymentStatusUpdate", handleMessage);
-      ably.close();
     };
-  }, [router, handleClearCart]);
+  }, [router, handleClearCart, ablyKey]);
 
   // Formatação do tempo em MM:SS
   const formatTime = (seconds: number) => {
