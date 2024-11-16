@@ -40,6 +40,10 @@ const cartReducer = (state: CartItem[], action: any) => {
     case 'LOAD_CART':
       return action.payload;
 
+    case 'CLEAR_CART':
+    localStorage.removeItem('cart');
+    return [];
+
     default:
       return state;
   }

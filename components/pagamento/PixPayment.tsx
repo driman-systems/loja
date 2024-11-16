@@ -1,14 +1,15 @@
 "use client";
+
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
 import clipboard from "clipboard";
+import { useCart } from "@/components/produtos/carrinhoContext"; // Caminho ajustado para o CartContext
 
 interface PixPaymentProps {
   totalAmount: number;
   sessionEmail: string;
-  handleClearCart: () => void;
   traduzirErroPagamento: (mensagemErro: string) => string;
   bookings: any[];
   clientId: string | null;
@@ -17,7 +18,6 @@ interface PixPaymentProps {
 const PixPayment: React.FC<PixPaymentProps> = ({
   totalAmount,
   sessionEmail,
-  handleClearCart,
   traduzirErroPagamento,
   bookings,
   clientId,
@@ -31,7 +31,9 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>(120);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [paymentApproved, setPaymentApproved] = useState<boolean>(false);
+
   const router = useRouter();
+  const { dispatch } = useCart(); // Acessa o contexto do carrinho
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -70,7 +72,6 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       const paymentResult = await paymentResponse.json();
 
       if (paymentResult.success) {
-        handleClearCart();
         setPixQRCode(paymentResult.payment.pixQRCode);
         setPixLink(paymentResult.payment.pixLink);
         setTransactionId(paymentResult.payment.id);
@@ -89,7 +90,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setLoading(false);
       setGeneratingQRCode(false);
     }
-  }, [clientId, totalAmount, sessionEmail, cpf, bookings, handleClearCart, traduzirErroPagamento]);
+  }, [clientId, totalAmount, sessionEmail, cpf, bookings, traduzirErroPagamento]);
 
   useEffect(() => {
     if (!transactionId || paymentApproved) return;
@@ -110,7 +111,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
               toast.dismiss();
               toast.success("Pagamento aprovado com sucesso!", { position: "top-center" });
               setPaymentApproved(true);
-              handleClearCart();
+              dispatch({ type: "CLEAR_CART" }); // Limpa o carrinho após o pagamento ser aprovado
               router.push(`/sucesso/${transactionId}`);
             }
             return;
@@ -133,7 +134,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     }, 3000);
 
     return () => clearInterval(intervalId);
-  }, [transactionId, handleClearCart, router, paymentApproved]);
+  }, [transactionId, paymentApproved, dispatch, router]);
 
   useEffect(() => {
     if (timeLeft === 0 && pixQRCode) {
