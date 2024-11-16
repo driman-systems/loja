@@ -74,7 +74,6 @@ const PaymentPage = () => {
             clientId={clientId || null} // Passando o clientId para PixPayment
             totalAmount={totalAmount}
             sessionEmail={session?.user.email || "guest"}
-            handleClearCart={handleClearCart}
             traduzirErroPagamento={traduzirErroPagamento}
             bookings={bookings}          />
         )}
