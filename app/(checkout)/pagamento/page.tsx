@@ -56,7 +56,11 @@ const PaymentPage = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white flex justify-center items-center">
       <div className="max-w-2xl w-full bg-gray-800 p-6 rounded-lg shadow-lg">
-        <ToastContainer />
+        <ToastContainer
+          limit={1}
+          autoClose={3000}
+          position="top-center"
+        />
 
         <h2 className="text-xl mb-6">Escolha o método de pagamento</h2>
 

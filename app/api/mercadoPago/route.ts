@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
 
         if (pointOfInteraction && pointOfInteraction.transaction_data) {
           const pixQRCode = pointOfInteraction.transaction_data.qr_code_base64;
-          const pixLink = pointOfInteraction.transaction_data.ticket_url;
+          const pixLink = pointOfInteraction.transaction_data.qr_code;
           const expirationDate = result.date_of_expiration;
 
           return NextResponse.json({

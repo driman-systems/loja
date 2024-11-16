@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { toast } from "react-toastify";
 import { useRouter } from "next/navigation";
+import clipboard from "clipboard";
 
 interface PixPaymentProps {
   totalAmount: number;
@@ -11,7 +12,6 @@ interface PixPaymentProps {
   traduzirErroPagamento: (mensagemErro: string) => string;
   bookings: any[];
   clientId: string | null;
-  expirationDate?: string;
 }
 
 const PixPayment: React.FC<PixPaymentProps> = ({
@@ -33,14 +33,12 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [paymentApproved, setPaymentApproved] = useState<boolean>(false);
   const router = useRouter();
 
-  // Função para formatar o tempo em MM:SS
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
   };
 
-  // Função para gerar o QR Code Pix
   const generatePixQRCode = useCallback(async () => {
     if (!cpf) {
       setError("Por favor, insira seu CPF.");
@@ -76,13 +74,16 @@ const PixPayment: React.FC<PixPaymentProps> = ({
         setPixQRCode(paymentResult.payment.pixQRCode);
         setPixLink(paymentResult.payment.pixLink);
         setTransactionId(paymentResult.payment.id);
+        toast.dismiss();
         toast.success("QR Code gerado com sucesso!", { position: "top-center" });
       } else {
         setError(traduzirErroPagamento(paymentResult.error));
+        toast.dismiss();
         toast.error(traduzirErroPagamento(paymentResult.error), { position: "top-center" });
       }
     } catch (err) {
       setError("Ocorreu um erro no pagamento.");
+      toast.dismiss();
       toast.error("Ocorreu um erro no pagamento.", { position: "top-center" });
     } finally {
       setLoading(false);
@@ -90,9 +91,8 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     }
   }, [clientId, totalAmount, sessionEmail, cpf, bookings, handleClearCart, traduzirErroPagamento]);
 
-  // Função de polling para verificar o status do pagamento
   useEffect(() => {
-    if (!transactionId || paymentApproved) return; // Interrompe o polling se o pagamento já foi aprovado
+    if (!transactionId || paymentApproved) return;
 
     const checkPaymentStatus = async () => {
       try {
@@ -106,7 +106,8 @@ const PixPayment: React.FC<PixPaymentProps> = ({
 
         if (data.success) {
           if (data.status === "approved") {
-            if (!paymentApproved) { // Evita o toast repetido
+            if (!paymentApproved) {
+              toast.dismiss();
               toast.success("Pagamento aprovado com sucesso!", { position: "top-center" });
               setPaymentApproved(true);
               handleClearCart();
@@ -114,6 +115,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
             }
             return;
           } else if (data.status === "rejected") {
+            toast.dismiss();
             toast.error("Pagamento rejeitado. Tente novamente.", { position: "top-center" });
             setError("Pagamento rejeitado.");
             return;
@@ -126,16 +128,13 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       }
     };
 
-    // Intervalo de polling a cada 2 segundos
     const intervalId = setInterval(() => {
       checkPaymentStatus();
-    }, 2000);
+    }, 3000);
 
-    // Limpa o polling quando o componente desmonta ou o pagamento é concluído
     return () => clearInterval(intervalId);
   }, [transactionId, handleClearCart, router, paymentApproved]);
 
-  // Regenera o QR Code quando o tempo acaba
   useEffect(() => {
     if (timeLeft === 0 && pixQRCode) {
       setPixQRCode(null);
@@ -143,7 +142,6 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     }
   }, [timeLeft, pixQRCode, generatePixQRCode]);
 
-  // Atualiza o contador
   useEffect(() => {
     if (pixQRCode && timeLeft > 0 && !generatingQRCode) {
       const interval = setInterval(() => {
@@ -155,13 +153,19 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   }, [pixQRCode, timeLeft, generatingQRCode]);
 
   const handlePixLinkCopy = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(pixLink || "").then(
-        () => toast.success("Link copiado com sucesso!", { position: "top-center" }),
-        () => toast.error("Falha ao copiar o link. Tente manualmente.", { position: "top-center" })
-      );
+    if (pixLink) {
+      try {
+        clipboard.copy(pixLink);
+        toast.dismiss();
+        toast.success("Pix Copia e Cola copiado com sucesso!", { position: "top-center" });
+      } catch (error) {
+        console.error("Erro ao copiar o Pix Copia e Cola:", error);
+        toast.dismiss();
+        toast.error("Falha ao copiar o Pix Copia e Cola. Tente manualmente.", { position: "top-center" });
+      }
     } else {
-      toast.error("Seu dispositivo não permite copiar automaticamente. Copie manualmente.", { position: "top-center" });
+      toast.dismiss();
+      toast.error("Pix Copia e Cola não disponível.", { position: "top-center" });
     }
   };
 
@@ -176,7 +180,6 @@ const PixPayment: React.FC<PixPaymentProps> = ({
               <div className="flex justify-center items-center h-24 w-24 mx-auto rounded-full bg-gray-800 text-white text-2xl font-bold">
                 {formatTime(timeLeft)}
               </div>
-
               <div className="mt-6">
                 <h3 className="text-xl mb-4">Pagamento via Pix</h3>
                 <p className="mb-4">Escaneie o QR Code abaixo ou copie o link para pagamento:</p>
@@ -189,7 +192,6 @@ const PixPayment: React.FC<PixPaymentProps> = ({
                   unoptimized={true}
                 />
               </div>
-
               {pixLink && (
                 <div className="mb-4">
                   <input
@@ -197,16 +199,12 @@ const PixPayment: React.FC<PixPaymentProps> = ({
                     value={pixLink}
                     readOnly
                     className="w-full p-2 rounded bg-gray-700 text-white"
-                    onClick={(e) => {
-                      const input = e.target as HTMLInputElement;
-                      input.select();
-                    }}
                   />
                   <button
-                    className="mt-2 bg-red-500 hover:bg-red-700 text-white p-2 rounded"
                     onClick={handlePixLinkCopy}
+                    className="mt-2 bg-red-500 hover:bg-red-700 text-white p-2 rounded"
                   >
-                    Copiar Link
+                    Pix copia e cola
                   </button>
                 </div>
               )}
@@ -233,7 +231,6 @@ const PixPayment: React.FC<PixPaymentProps> = ({
           )}
         </>
       )}
-
       {error && <p className="text-red-400 mt-4">{error}</p>}
     </div>
   );
