@@ -29,7 +29,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [generatingQRCode, setGeneratingQRCode] = useState<boolean>(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null); // Inicia como null, só começa quando o QR Code é gerado
+  const [timeLeft, setTimeLeft] = useState<number | null>(null); // Timer inicia somente após o QR Code ser gerado
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [paymentApproved, setPaymentApproved] = useState<boolean>(false);
 
@@ -149,6 +149,48 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       generatePixQRCode(); // Gera um novo QR Code automaticamente
     }
   }, [timeLeft, pixQRCode, generatePixQRCode]);
+
+  useEffect(() => {
+    if (!transactionId || paymentApproved || !pixQRCode) return; // Só verifica após o QR Code aparecer
+
+    const checkPaymentStatus = async () => {
+      try {
+        const response = await fetch("/api/check-payment-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { id: transactionId } }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          if (data.status === "approved") {
+            if (!paymentApproved) {
+              toast.dismiss();
+              toast.success("Pagamento aprovado com sucesso!", { position: "top-center" });
+              setPaymentApproved(true);
+              dispatch({ type: "CLEAR_CART" }); // Limpa o carrinho após o pagamento ser aprovado
+              router.push(`/sucesso/${transactionId}`);
+            }
+          } else if (data.status === "rejected") {
+            toast.dismiss();
+            toast.error("Pagamento rejeitado. Tente novamente.", { position: "top-center" });
+            setError("Pagamento rejeitado.");
+          }
+        } else {
+          console.error("Erro ao consultar status:", data.error);
+        }
+      } catch (error) {
+        console.error("Erro ao consultar status:", error);
+      }
+    };
+
+    const intervalId = setInterval(() => {
+      checkPaymentStatus();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [transactionId, paymentApproved, pixQRCode, dispatch, router]);
 
   const handlePixLinkCopy = () => {
     if (pixLink) {
