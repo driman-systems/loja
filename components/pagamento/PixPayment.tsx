@@ -23,12 +23,13 @@ const PixPayment: React.FC<PixPaymentProps> = ({
   clientId,
 }) => {
   const [cpf, setCpf] = useState<string>("");
+  const [isCpfValid, setIsCpfValid] = useState<boolean>(true);
   const [pixQRCode, setPixQRCode] = useState<string | null>(null);
   const [pixLink, setPixLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [generatingQRCode, setGeneratingQRCode] = useState<boolean>(false);
-  const [timeLeft, setTimeLeft] = useState<number>(120);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null); // Inicia como null, só começa quando o QR Code é gerado
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [paymentApproved, setPaymentApproved] = useState<boolean>(false);
 
@@ -41,15 +42,54 @@ const PixPayment: React.FC<PixPaymentProps> = ({
     return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
   };
 
+  // Função para validar CPF
+  const validateCpf = (cpf: string): boolean => {
+    cpf = cpf.replace(/[^\d]/g, ""); // Remove caracteres não numéricos
+    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+      sum += parseInt(cpf[i]) * (10 - i);
+    }
+    let checkDigit1 = 11 - (sum % 11);
+    if (checkDigit1 >= 10) checkDigit1 = 0;
+
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+      sum += parseInt(cpf[i]) * (11 - i);
+    }
+    let checkDigit2 = 11 - (sum % 11);
+    if (checkDigit2 >= 10) checkDigit2 = 0;
+
+    return checkDigit1 === parseInt(cpf[9]) && checkDigit2 === parseInt(cpf[10]);
+  };
+
+  // Função para lidar com a entrada do CPF e aplicar a máscara
+  const handleCpfChange = (value: string) => {
+    const maskedCpf = value
+      .replace(/\D/g, "") // Remove caracteres não numéricos
+      .replace(/(\d{3})(\d)/, "$1.$2") // Adiciona ponto após os primeiros 3 dígitos
+      .replace(/(\d{3})(\d)/, "$1.$2") // Adiciona ponto após os próximos 3 dígitos
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2"); // Adiciona traço nos últimos 2 dígitos
+    setCpf(maskedCpf);
+
+    const rawCpf = maskedCpf.replace(/[^\d]/g, ""); // Remove a máscara para validar
+    if (rawCpf.length === 11) {
+      setIsCpfValid(validateCpf(rawCpf)); // Valida o CPF se tiver 11 dígitos
+    } else {
+      setIsCpfValid(true); // Reseta a validação para evitar erro prematuro
+    }
+  };
+
   const generatePixQRCode = useCallback(async () => {
-    if (!cpf) {
-      setError("Por favor, insira seu CPF.");
+    const rawCpf = cpf.replace(/[^\d]/g, ""); // Remove a máscara antes de enviar
+    if (!rawCpf || rawCpf.length !== 11 || !isCpfValid) {
+      setError("Por favor, insira um CPF válido.");
       return;
     }
 
     setLoading(true);
     setGeneratingQRCode(true);
-    setTimeLeft(120);
 
     const paymentData = {
       clientId,
@@ -57,7 +97,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       payment_method_id: "pix",
       payer: {
         email: sessionEmail || "guest",
-        identification: { type: "CPF", number: cpf },
+        identification: { type: "CPF", number: rawCpf },
       },
       bookings,
     };
@@ -75,6 +115,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
         setPixQRCode(paymentResult.payment.pixQRCode);
         setPixLink(paymentResult.payment.pixLink);
         setTransactionId(paymentResult.payment.id);
+        setTimeLeft(240); // Inicia o contador apenas quando o QR Code é gerado
         toast.dismiss();
         toast.success("QR Code gerado com sucesso!", { position: "top-center" });
       } else {
@@ -90,68 +131,24 @@ const PixPayment: React.FC<PixPaymentProps> = ({
       setLoading(false);
       setGeneratingQRCode(false);
     }
-  }, [clientId, totalAmount, sessionEmail, cpf, bookings, traduzirErroPagamento]);
+  }, [clientId, totalAmount, sessionEmail, cpf, bookings, isCpfValid, traduzirErroPagamento]);
 
   useEffect(() => {
-    if (!transactionId || paymentApproved) return;
-
-    const checkPaymentStatus = async () => {
-      try {
-        const response = await fetch("/api/check-payment-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: { id: transactionId } }),
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          if (data.status === "approved") {
-            if (!paymentApproved) {
-              toast.dismiss();
-              toast.success("Pagamento aprovado com sucesso!", { position: "top-center" });
-              setPaymentApproved(true);
-              dispatch({ type: "CLEAR_CART" }); // Limpa o carrinho após o pagamento ser aprovado
-              router.push(`/sucesso/${transactionId}`);
-            }
-            return;
-          } else if (data.status === "rejected") {
-            toast.dismiss();
-            toast.error("Pagamento rejeitado. Tente novamente.", { position: "top-center" });
-            setError("Pagamento rejeitado.");
-            return;
-          }
-        } else {
-          console.error("Erro ao consultar status:", data.error);
-        }
-      } catch (error) {
-        console.error("Erro ao consultar status:", error);
-      }
-    };
-
-    const intervalId = setInterval(() => {
-      checkPaymentStatus();
-    }, 3000);
-
-    return () => clearInterval(intervalId);
-  }, [transactionId, paymentApproved, dispatch, router]);
-
-  useEffect(() => {
-    if (timeLeft === 0 && pixQRCode) {
-      setPixQRCode(null);
-      generatePixQRCode();
-    }
-  }, [timeLeft, pixQRCode, generatePixQRCode]);
-
-  useEffect(() => {
-    if (pixQRCode && timeLeft > 0 && !generatingQRCode) {
+    if (timeLeft && timeLeft > 0) {
       const interval = setInterval(() => {
-        setTimeLeft((prevTime) => prevTime - 1);
+        setTimeLeft((prevTime) => (prevTime ? prevTime - 1 : 0));
       }, 1000);
 
       return () => clearInterval(interval);
     }
-  }, [pixQRCode, timeLeft, generatingQRCode]);
+  }, [timeLeft]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && pixQRCode) {
+      setPixQRCode(null); // Reseta o QR Code anterior
+      generatePixQRCode(); // Gera um novo QR Code automaticamente
+    }
+  }, [timeLeft, pixQRCode, generatePixQRCode]);
 
   const handlePixLinkCopy = () => {
     if (pixLink) {
@@ -179,7 +176,7 @@ const PixPayment: React.FC<PixPaymentProps> = ({
           {pixQRCode ? (
             <>
               <div className="flex justify-center items-center h-24 w-24 mx-auto rounded-full bg-gray-800 text-white text-2xl font-bold">
-                {formatTime(timeLeft)}
+                {formatTime(timeLeft || 0)}
               </div>
               <div className="mt-6">
                 <h3 className="text-xl mb-4">Pagamento via Pix</h3>
@@ -213,18 +210,21 @@ const PixPayment: React.FC<PixPaymentProps> = ({
           ) : (
             <div className="mb-4">
               <input
-                type="number"
+                type="text"
                 value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
+                onChange={(e) => handleCpfChange(e.target.value)}
                 placeholder="Digite seu CPF"
                 className="w-full p-2 rounded bg-gray-700 text-white"
               />
+              {!isCpfValid && <p className="text-red-400 mt-2">CPF inválido.</p>}
               <button
                 className={`w-full mt-2 bg-red-500 hover:bg-red-700 text-white p-2 rounded ${
-                  loading ? "opacity-50 cursor-not-allowed" : ""
+                  loading || !cpf || cpf.replace(/[^\d]/g, "").length !== 11 || !isCpfValid
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
                 }`}
                 onClick={generatePixQRCode}
-                disabled={loading}
+                disabled={loading || !cpf || cpf.replace(/[^\d]/g, "").length !== 11 || !isCpfValid}
               >
                 {loading ? "Gerando QR Code..." : "Gerar QR Code"}
               </button>
