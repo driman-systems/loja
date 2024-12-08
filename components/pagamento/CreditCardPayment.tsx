@@ -6,6 +6,7 @@ interface CreditCardPaymentProps {
   totalAmount: number;
   sessionEmail: string;
   bookings: any[];
+  clientId: string | null; // Incluído o clientId
   handleClearCart: () => void;
   traduzirErroPagamento: (mensagemErro: string) => string;
 }
@@ -14,13 +15,13 @@ const CreditCardPayment: React.FC<CreditCardPaymentProps> = ({
   totalAmount,
   sessionEmail,
   bookings,
+  clientId,
   handleClearCart,
   traduzirErroPagamento,
 }) => {
   const router = useRouter();
 
   const handleSubmitCreditCard = async (formData: any) => {
-    // Dados do pagamento recebidos do componente CardPayment
     const {
       paymentMethodId,
       token,
@@ -31,6 +32,7 @@ const CreditCardPayment: React.FC<CreditCardPaymentProps> = ({
     } = formData;
 
     const paymentData = {
+      clientId, // Enviando o clientId para o backend
       transaction_amount: totalAmount,
       token: token,
       description: "Pagamento de produtos", // Ajuste a descrição conforme necessário
@@ -57,15 +59,17 @@ const CreditCardPayment: React.FC<CreditCardPaymentProps> = ({
       const paymentResult = await paymentResponse.json();
 
       if (paymentResult.success) {
+        // Limpa o carrinho e redireciona para a página de sucesso
         handleClearCart();
         router.push(`/sucesso/${paymentResult.payment.id}`);
       } else {
-        toast.error(traduzirErroPagamento(paymentResult.error), {
-          position: "top-center",
-        });
+        // Traduz e exibe o erro retornado pelo backend
+        const mensagemErro = traduzirErroPagamento(paymentResult.error);
+        toast.error(mensagemErro, { position: "top-center" });
       }
     } catch (err) {
-      toast.error("Ocorreu um erro no pagamento.", {
+      // Trata erros inesperados na requisição
+      toast.error("Ocorreu um erro inesperado. Tente novamente.", {
         position: "top-center",
       });
     }
@@ -74,7 +78,7 @@ const CreditCardPayment: React.FC<CreditCardPaymentProps> = ({
   return (
     <div className="mt-6">
       <CardPayment
-        initialization={{ amount: totalAmount }}
+        initialization={{ amount: Math.max(totalAmount, 5) }} // Garante um valor mínimo de 5 para evitar restrições
         onSubmit={handleSubmitCreditCard}
         customization={{
           visual: { theme: "" },

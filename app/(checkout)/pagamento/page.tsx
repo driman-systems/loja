@@ -80,6 +80,7 @@ const PaymentPage = () => {
 
         {selectedPaymentMethod === "credit_card" && (
           <CreditCardPayment
+            clientId={clientId || null}
             totalAmount={totalAmount}
             sessionEmail={session?.user.email || "guest"}
             bookings={bookings}

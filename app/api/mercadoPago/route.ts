@@ -1,5 +1,3 @@
-// File: /api/mercado-pago/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { sendVoucherEmail } from '@/components/pagamento/voucher-email';
@@ -11,10 +9,9 @@ const generateIdempotencyKey = () => crypto.randomBytes(16).toString('hex');
 
 export async function POST(req: NextRequest) {
   try {
-    // Capturar e logar o body da requisição
     const body = await req.json();
 
-    // Validar se o clientId está presente
+    // Validar clientId
     if (!body.clientId) {
       console.error('Erro: ClientId não fornecido.');
       return NextResponse.json({
@@ -23,7 +20,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Validar se o clientId é válido e corresponde ao usuário autenticado
+    // Validar clientId no banco
     const client = await prisma.clientUser.findUnique({
       where: { id: body.clientId },
     });
@@ -36,10 +33,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Criar as reservas no banco de dados
+    // Criar reservas no banco
     const createdBookings = await Promise.all(
       body.bookings.map(async (bookingData: any) => {
-
         const createdBooking = await prisma.booking.create({
           data: {
             productId: bookingData.productId,
@@ -49,7 +45,7 @@ export async function POST(req: NextRequest) {
             time: bookingData.time,
             quantity: bookingData.quantity,
             price: bookingData.price,
-            status: bookingData.status,
+            status: bookingData.status || 'Pendente',
             paymentStatus: 'Pendente',
           },
         });
@@ -57,10 +53,9 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // Atualizar body.bookings com as reservas criadas
     body.bookings = createdBookings;
 
-    // Preparar os dados do pagamento a serem enviados ao Mercado Pago
+    // Dados do pagamento
     const paymentData = {
       transaction_amount: body.transaction_amount,
       token: body.token,
@@ -77,32 +72,44 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Gerar chave de idempotência única
+    // Criar pagamento no Mercado Pago
     const idempotencyKey = generateIdempotencyKey();
-
-    // Criar pagamento usando a API do Mercado Pago
     const response = await fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, // Seu access token do Mercado Pago
+        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
         'X-Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify(paymentData),
     });
 
-    // Verificar resposta do Mercado Pago
+    const result = await response.json();
+
     if (!response.ok) {
-      console.error('Erro na resposta do Mercado Pago:', response.status, await response.text());
+      console.error('Erro na resposta do Mercado Pago:', result);
+      // Atualizar campos no banco em caso de erro
+      await prisma.payment.create({
+        data: {
+          transactionId: result.id ? result.id.toString() : 'unknown_transaction_id',
+          status: 'failed',
+          transactionAmount: body.transaction_amount,
+          payerEmail: body.payer.email,
+          installments: body.installments || 1,
+          paymentMethod: body.payment_method_id,
+          bookingIds: body.bookings.map((booking: any) => booking.id),
+          statusDetail: result.cause ? result.cause[0]?.description : 'Erro desconhecido',
+          errorDetails: result.cause ? JSON.stringify(result.cause) : null,
+        },
+      });
+
       return NextResponse.json({
         success: false,
-        error: 'Erro ao criar pagamento no Mercado Pago.',
+        error: result.cause ? result.cause[0]?.description : 'Erro desconhecido',
       });
     }
 
-    const result = await response.json();
-
-    // Registrar o pagamento no banco de dados
+    // Criar registro de pagamento no banco
     const createdPayment = await prisma.payment.create({
       data: {
         transactionId: result.id ? result.id.toString() : 'unknown_transaction_id',
@@ -113,77 +120,51 @@ export async function POST(req: NextRequest) {
         paymentMethod: body.payment_method_id,
         bookingIds: body.bookings.map((booking: any) => booking.id),
         statusDetail: result.status_detail,
+        dateApproved: result.date_approved || null,
+        statusMessage: result.status === 'approved' ? 'Pagamento aprovado com sucesso' : 'Pagamento pendente',
       },
     });
 
-    // Atualizar os status de pagamento das reservas com base no resultado do pagamento
+    // Atualizar status das reservas
     const paymentStatus = result.status === 'approved' ? 'Aprovado' : 'Aguardando Pagamento';
     await prisma.booking.updateMany({
       where: { id: { in: body.bookings.map((booking: any) => booking.id) } },
-      data: { paymentStatus: paymentStatus },
+      data: {
+        paymentStatus: paymentStatus,
+        status: result.status === 'approved' ? 'Confirmado' : 'Pendente',
+      },
     });
 
-    // Processamento do resultado do pagamento
-    if (result.status === 'approved' || result.status === 'pending') {
-      if (body.payment_method_id === 'pix') {
-        const pointOfInteraction = result.point_of_interaction;
-
-        if (pointOfInteraction && pointOfInteraction.transaction_data) {
-          const pixQRCode = pointOfInteraction.transaction_data.qr_code_base64;
-          const pixLink = pointOfInteraction.transaction_data.qr_code;
-          const expirationDate = result.date_of_expiration;
-
-          return NextResponse.json({
-            success: true,
-            payment: {
-              id: result.id,
-              pixQRCode,
-              pixLink,
-              expirationDate,
+    // Enviar email com voucher (se aprovado)
+    if (result.status === 'approved') {
+      await Promise.all(
+        body.bookings.map(async (booking: any) => {
+          const bookingDetails = await prisma.booking.findUnique({
+            where: { id: booking.id },
+            include: {
+              client: true,
+              company: true,
+              product: true,
             },
           });
-        } else {
-          console.error('Informações de pagamento via Pix indisponíveis.');
-          return NextResponse.json({
-            success: false,
-            error: 'Informações de pagamento via Pix indisponíveis.',
-          });
-        }
-      } else if (result.status === 'approved') {
-        await Promise.all(
-          body.bookings.map(async (booking: any) => {
-            const bookingDetails = await prisma.booking.findUnique({
-              where: { id: booking.id },
-              include: {
-                client: true,
-                company: true,
-                product: true,
-              },
-            });
 
-            if (bookingDetails) {
-              const pdfBytes = await generateVoucherPDF(
-                bookingDetails,
-                bookingDetails.product,
-                bookingDetails.company
-              );
+          if (bookingDetails) {
+            const pdfBytes = await generateVoucherPDF(
+              bookingDetails,
+              bookingDetails.product,
+              bookingDetails.company
+            );
 
-              await sendVoucherEmail(
-                bookingDetails.client.email,
-                Buffer.from(pdfBytes)
-              );
-            }
-          })
-        );
-
-        return NextResponse.json({ success: true, payment: createdPayment });
-      } else {
-        return NextResponse.json({ success: true, payment: createdPayment });
-      }
-    } else {
-      console.error('Erro no pagamento:', result.status_detail);
-      return NextResponse.json({ success: false, error: result.status_detail });
+            await sendVoucherEmail(
+              bookingDetails.client.email,
+              Buffer.from(pdfBytes)
+            );
+          }
+        })
+      );
     }
+
+    return NextResponse.json({ success: true, payment: createdPayment });
   } catch (error: any) {
     console.error('Erro ao processar pagamento:', error);
     return NextResponse.json({ success: false, error: error.message });
